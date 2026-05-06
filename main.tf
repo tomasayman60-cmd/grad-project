@@ -73,6 +73,27 @@ resource "aws_security_group" "ecourses_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  ingress {
+    from_port   = 5000
+    to_port     = 5000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 9090
+    to_port     = 9090
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 3000
+    to_port     = 3000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -113,27 +134,31 @@ resource "aws_instance" "ecourses_website" {
   user_data = <<-EOF
 #!/bin/bash
 yum update -y
-yum install -y docker git
+yum install -y docker git python3-pip
 systemctl start docker
 systemctl enable docker
 usermod -a -G docker ec2-user
 
-curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-\$(uname -s)-\$(uname -m)" -o /usr/local/bin/docker-compose
+# Install docker-compose
+curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 chmod +x /usr/local/bin/docker-compose
 
+# Install Python dependencies
+pip3 install prometheus-client psutil boto3 requests
+
+# Clone repository
 cd /home/ec2-user
+git clone https://github.com/tomasayman60-cmd/grad-project.git
+cd grad-project
 
-if [ ! -d "online-course-website-" ]; then
-  git clone https://github.com/tomasayman60-cmd/online-course-website-.git
-fi
+# Change INSTANCE_ID in monitoring_server.py
+INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+sed -i "s/i-xxxxxxxxxxxx/$INSTANCE_ID/" monitoring_server.py
 
-cd online-course-website-
+# Run monitoring server in background
+nohup python3 monitoring_server.py > /tmp/monitoring.log 2>&1 &
 
-docker-compose down || true
-docker rmi -f \$(docker images -q) 2>/dev/null || true
-
-git pull
-
+# Start Docker Compose
 docker-compose up -d
 EOF
 
@@ -164,16 +189,52 @@ resource "null_resource" "deploy_update" {
 
   provisioner "remote-exec" {
     inline = [
-      "cd /home/ec2-user/online-course-website- || git clone https://github.com/tomasayman60-cmd/online-course-website-.git",
-      "cd /home/ec2-user/online-course-website-",
+      "cd /home/ec2-user/grad-project || git clone https://github.com/tomasayman60-cmd/grad-project.git",
+      "cd /home/ec2-user/grad-project",
       "docker-compose down || true",
-      "docker rmi -f $(docker images -q) 2>/dev/null || true",
+      "pkill -f monitoring_server.py || true",
       "git pull",
+      "pip3 install -r requirements.txt || true",
+      "nohup python3 monitoring_server.py > /tmp/monitoring.log 2>&1 &",
       "docker-compose up -d"
     ]
   }
 
   depends_on = [aws_instance.ecourses_website]
+}
+
+# ============================================
+# OUTPUTS
+# ============================================
+
+output "instance_public_ip" {
+  description = "Public IP of the EC2 instance"
+  value       = aws_instance.ecourses_website.public_ip
+}
+
+output "website_url" {
+  description = "Website URL"
+  value       = "http://${aws_instance.ecourses_website.public_ip}"
+}
+
+output "prometheus_url" {
+  description = "Prometheus UI URL"
+  value       = "http://${aws_instance.ecourses_website.public_ip}:9090"
+}
+
+output "grafana_url" {
+  description = "Grafana UI URL"
+  value       = "http://${aws_instance.ecourses_website.public_ip}:3000"
+}
+
+output "metrics_url" {
+  description = "Metrics endpoint"
+  value       = "http://${aws_instance.ecourses_website.public_ip}:5000/metrics"
+}
+
+output "ssh_command" {
+  description = "SSH command to connect"
+  value       = "ssh -i ${var.key_name}.pem ec2-user@${aws_instance.ecourses_website.public_ip}"
 }
 
 # ============================================
