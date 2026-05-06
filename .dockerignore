@@ -1,0 +1,12 @@
+*dockerfile
+*terraform.tfstate.1777756387.backup
+*terraform.tfstate
+*tf.pem
+*main.tf
+*provider.tf
+*outputs.tf
+*variables.tf
+*.bash_history
+*.bash_history
+*LauncherFolder
+*MyDocuments

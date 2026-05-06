@@ -1,0 +1,9 @@
+FROM python:3.9-alpine
+
+WORKDIR /app
+
+COPY . .
+
+EXPOSE 80
+
+CMD ["python", "-m", "http.server", "80"]
