@@ -1,0 +1,18 @@
+# Ignore Terraform state files
+*.tfstate
+*.tfstate.*
+
+# Ignore sensitive variables
+terraform.tfvars
+*.auto.tfvars
+
+# Ignore EC2 Key Pair files (Very Important!)
+*.pem
+*.ppk
+*Desktop
+# Ignore local user_data scripts (if any)
+user_data*.sh
+
+# Ignore local Docker build files
+app/.env
+MyDocuments
